@@ -89,14 +89,14 @@ insightful tool for evaluating used car prices.
 
 Hubert Wojewoda:
 
-- Feature Engineering
+- Data Preprocessing
 - Performance Optimization
 - Shiny Dashboard Development
 - Object-Oriented Programming
 
 Michał Grzyb:
 
-- Data Preprocessing
+- Feature Engineering
 - Model Building
 - Writing Custom Functions
 - Object-Oriented Programming
