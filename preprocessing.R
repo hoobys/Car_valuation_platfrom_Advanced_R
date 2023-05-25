@@ -2,6 +2,7 @@
 library(tidyverse)
 library(caret)
 library(randomForest)
+library(xgboost)
 
 # Read the car dataset into a data frame
 car_data <- read.csv("otomoto_data.csv")
@@ -87,44 +88,12 @@ car_data <- car_data %>%
 # Print the updated dataset
 print(car_data)
 
-# Encode categorical variables and scale numerical variables
+# Encode all character columns as factors
 car_data <- car_data %>%
-  mutate(across(where(is.character), as.factor),  # Encode all character columns as factors
-         across(where(is.numeric), scale))         # Scale all numeric columns
+  mutate(across(where(is.character), as.factor))
+
 
 # Print the updated dataset
 print(car_data)
 
-str(car_data)
 
-# Split the data into training and testing sets
-set.seed(42)  # For reproducibility
-train_indices <- createDataPartition(car_data$Cena, p = 0.7, list = FALSE)
-train_data <- car_data[train_indices, ]
-test_data <- car_data[-train_indices, ]
-
-# Train a linear regression model
-lm_model <- train(Cena ~ ., data = train_data, method = "lm")
-
-# Make predictions on the test data
-test_data_scaled <- test_data %>% select(-Cena)  # Exclude the response variable
-predictions_scaled <- predict(lm_model, newdata = test_data_scaled)
-
-# Scaling parameters for Cena
-scaled_center <- attr(car_data$Cena, "scaled:center")
-scaled_scale <- attr(car_data$Cena, "scaled:scale")
-
-# Unscaled predictions
-unscaled_predictions <- predictions_scaled * scaled_scale + scaled_center
-
-# Evaluate model performance
-rmse <- RMSE(unscaled_predictions, test_data$Cena)
-mae <- MAE(unscaled_predictions, test_data$Cena)
-r_squared <- R2(unscaled_predictions, test_data$Cena)
-mape <- mean(abs((test_data$Cena - unscaled_predictions) / test_data$Cena)) * 100
-
-# Print evaluation metrics
-print(paste("RMSE:", rmse))
-print(paste("MAE:", mae))
-print(paste("R-squared:", r_squared))
-print(paste("MAPE:", mape))
