@@ -1,3 +1,6 @@
+
+car_data <- preprocess_car_data('otomoto_data.csv')
+
 # Scale all numeric columns
 car_data <- car_data %>%
   mutate(across(where(is.numeric), scale)) 

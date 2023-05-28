@@ -1,3 +1,7 @@
+require(xgboost)
+
+car_data <- preprocess_car_data('otomoto_data.csv')
+
 # Split the data into training and testing sets
 set.seed(42)  # For reproducibility
 train_indices <- createDataPartition(car_data$Cena, p = 0.7, list = FALSE)

@@ -12,10 +12,18 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       menuItem("Home", tabName = "home"),
-      menuItem("Predictions", tabName = "predictions")
+      menuItem("Predictions", tabName = "predictions"),
+      menuItem("Scrape and Predict", tabName = "scrape_predict")
     )
   ),
   dashboardBody(
+    tags$style(
+      HTML("
+      body {
+        zoom: 1.3;
+      }
+    ")
+    ),
     tabItems(
       tabItem(tabName = "home",
               div(style = "display: flex; flex-direction: column; justify-content: center; align-items: center;",
@@ -46,8 +54,18 @@ ui <- dashboardPage(
               h3("Predicted Car Prices:"),
               div(style = "text-align: center; font-size: 24px; color: green", textOutput("lower_price_output")),
               div(style = "text-align: center; font-size: 36px;", textOutput("predicted_output")),
-              div(style = "text-align: center; font-size: 24px; color: red", textOutput("higher_price_output"))      )
-    )
+              div(style = "text-align: center; font-size: 24px; color: red", textOutput("higher_price_output"))      
+    ),
+    tabItem(tabName = "scrape_predict",
+            h2("Scrape Car Data and Predict Price"),
+            textInput("url", "Enter the URL of the car listing"),
+            actionButton("scrape_predict", "Scrape Data and Predict"),
+            br(),
+            h3("Scraped Car Data:"),
+            verbatimTextOutput("scraped_data_output"),
+            h3("Predicted Car Price:"),
+            htmlOutput("scraped_price_output")
+    ))
   )
 )
 
@@ -83,19 +101,60 @@ server <- function(input, output) {
   
   output$predicted_output <- renderText({
     predicted_price <- predicted_prices()
-    paste0("PLN", round(predicted_price, 2))
+    paste0("PLN ", round(predicted_price, 2))
   })
   
   output$lower_price_output <- renderText({
     predicted_price <- predicted_prices()
     lower_price <- predicted_price * 0.95
-    paste0("Lower: PLN", round(lower_price, 2))
+    paste0("Lower confidence bound: PLN ", round(lower_price, 2))
   })
   
   output$higher_price_output <- renderText({
     predicted_price <- predicted_prices()
     higher_price <- predicted_price * 1.05
-    paste0("Higher: PLN", round(higher_price, 2))
+    paste0("Higher confidence bound: PLN ", round(higher_price, 2))
+  })
+  
+  # Reactive expression for scraping and prediction
+  scraped_and_predicted <- eventReactive(input$scrape_predict, {
+    # Scrape data from the provided URL
+    scraped_data <- scrape_car_data(input$url)
+    
+    # Original, scraped price
+    original_price <- scrape_car_price(input$url)
+    
+    # Use the scraped data to predict the car price
+    prediction <- predict_car_price(scraped_data, car_data, xgb_model)
+    
+    list(scraped_data = scraped_data, prediction = prediction, original_price = original_price)
+  })
+  
+  output$scraped_data_output <- renderPrint({
+    scraped_and_predicted()$scraped_data
+  })
+  
+  output$scraped_price_output <- renderUI({
+    scraped_price <- scraped_and_predicted()$original_price
+    predicted_price <- scraped_and_predicted()$prediction
+    price_diff <- predicted_price - scraped_price
+    percentage_diff <- (price_diff / scraped_price) * 100
+    
+    color <- ifelse(price_diff > 0, "green", "red")
+    
+    HTML(
+      paste0(
+        "<div style='text-align: center; font-size: 24px;'>",
+        "Listed Price: PLN ", round(scraped_price, 2),
+        "</div>",
+        "<div style='text-align: center; font-size: 36px;'>",
+        "Predicted Price: PLN ", round(predicted_price, 2),
+        "</div>",
+        "<div style='text-align: center; font-size: 24px; color:", color, ";'>",
+        "Difference: PLN ", round(price_diff, 2), " (", round(percentage_diff, 2), "%)",
+        "</div>"
+      )
+    )
   })
 }
 
