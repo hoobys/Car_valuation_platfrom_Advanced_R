@@ -120,11 +120,8 @@ predict_car_price <- function(scraped_data, car_data, xgb_model) {
     Wystawca = factor(scraped_data$Wystawca, levels = levels(car_data$Wystawca))
   )
   
-  # Preprocess newdata with the same preprocessing applied to the training data
-  newdata_processed <- preprocess_data(newdata, is_training = FALSE)
-  
   # Make the prediction using the xgboost model
-  prediction <- predict(xgb_model, as.matrix(newdata_processed))
+  prediction <- carModel$predict(newdata, method = "xgb")
 
   return(prediction)
 }

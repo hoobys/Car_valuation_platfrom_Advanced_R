@@ -38,13 +38,15 @@ unscaled_predictions <- predictions_scaled * scaled_scale + scaled_center
 rmse <- RMSE(unscaled_predictions, test_data$Cena)
 mae <- MAE(unscaled_predictions, test_data$Cena)
 r_squared <- R2(unscaled_predictions, test_data$Cena)
-mape <- mean(abs((test_data$Cena - unscaled_predictions) / test_data$Cena)) * 100
+par <- price_accuracy_ratio(predictions, test_data$Cena)
+smae <- segment_specific_mae(predictions, test_data$Cena)
 
 # Print evaluation metrics
 print(paste("RMSE:", rmse))
 print(paste("MAE:", mae))
 print(paste("R-squared:", r_squared))
-print(paste("MAPE:", mape))
+print(paste("PAR:", par))
+print(paste("Segment specific MAE:", smae))
 
 saveRDS(lm_model, "lm_model.rds")
 

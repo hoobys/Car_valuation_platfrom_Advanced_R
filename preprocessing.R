@@ -118,4 +118,6 @@ create_box_plots <- function(data) {
 
 }
 
+car_data <- preprocess_car_data('otomoto_data.csv')
+
 create_box_plots(car_data)

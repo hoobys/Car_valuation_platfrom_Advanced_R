@@ -8,6 +8,7 @@ xgb_model <- readRDS("xgb_model.rds")
 
 # UI
 ui <- dashboardPage(
+  
   dashboardHeader(title = "Used Car Valuation Platform"),
   dashboardSidebar(
     sidebarMenu(
@@ -17,13 +18,6 @@ ui <- dashboardPage(
     )
   ),
   dashboardBody(
-    tags$style(
-      HTML("
-      body {
-        zoom: 1.3;
-      }
-    ")
-    ),
     tabItems(
       tabItem(tabName = "home",
               div(style = "display: flex; flex-direction: column; justify-content: center; align-items: center;",
@@ -89,11 +83,8 @@ server <- function(input, output) {
       Wystawca = factor(input$Wystawca, levels = levels(car_data$Wystawca))
     )
     
-    # Preprocess newdata with the same preprocessing applied to the training data
-    newdata_processed <- preprocess_data(newdata, is_training = FALSE)
-    
     # Make the prediction using the xgboost model
-    prediction <- predict(xgb_model, as.matrix(newdata_processed))
+    prediction <- carModel$predict(newdata, method = "xgb")
     
     return(prediction)
   })

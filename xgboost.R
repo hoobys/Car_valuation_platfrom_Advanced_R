@@ -1,4 +1,5 @@
 require(xgboost)
+Rcpp::sourceCpp("rcpp_metrics.cpp")
 
 car_data <- preprocess_car_data('otomoto_data.csv')
 
@@ -60,10 +61,14 @@ predictions <- predict(xgb_model, newdata = test_data_matrix)
 rmse <- RMSE(predictions, test_data$Cena)
 mae <- MAE(predictions, test_data$Cena)
 r_squared <- R2(predictions, test_data$Cena)
+par <- price_accuracy_ratio(predictions, test_data$Cena)
+smae <- segment_specific_mae(predictions, test_data$Cena)
 
 # Print evaluation metrics
 print(paste("RMSE:", rmse))
 print(paste("MAE:", mae))
 print(paste("R-squared:", r_squared))
+print(paste("PAR:", par))
+print(paste("Segment specific MAE:", smae))
 
 saveRDS(xgb_model, "xgb_model.rds")
