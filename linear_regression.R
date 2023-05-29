@@ -12,17 +12,16 @@ train_data <- car_data[train_indices, ]
 test_data <- car_data[-train_indices, ]
 
 # Train a linear regression model
-lm_model <- train(Cena ~ Rok_produkcji + 
+lm_model <- lm(Cena ~ Rok_produkcji + 
                     Przebieg_km + 
                     Pojemnosc_cm3 + 
-                    Moc_km + 
                     Paliwo + 
                     Skrzynia + 
                     Naped + 
                     Nadwozie + 
                     Pierwszy_wlasciciel + 
                     ASO + 
-                    Bezwypadkowy, data = train_data, method = "lm")
+                    Bezwypadkowy, data = train_data)
 
 # Make predictions on the test data
 test_data_scaled <- test_data %>% select(-Cena)  # Exclude the response variable
@@ -48,4 +47,22 @@ print(paste("R-squared:", r_squared))
 print(paste("MAPE:", mape))
 
 saveRDS(lm_model, "lm_model.rds")
+
+# Assumption checks for linear regression
+
+# Residual analysis
+residuals <- residuals(lm_model)
+
+# Linearity and nonlinearity test (Breusch-Pagan test)
+crPlots(lm_model)
+
+# Residual plots
+plot(lm_model, which = 1)  # Standardized residuals vs. fitted values
+plot(lm_model, which = 2)  # Normal Q-Q plot of residuals
+plot(lm_model, which = 3)  # Scale-location plot of residuals
+plot(lm_model, which = 5)  # Cook's distance plot
+
+resettest(lm_model)   # RESET test
+car::ncvTest(lm_model)   # Non-constant Variance Test (Breusch-Pagan test)
+car::vif(lm_model)   # Variance Inflation Factor (VIF)
 
