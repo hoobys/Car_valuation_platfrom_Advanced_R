@@ -1,10 +1,12 @@
 require(xgboost)
+require(randomForest)
 Rcpp::sourceCpp("rcpp_metrics.cpp")
 
 CarModel <- R6::R6Class("CarModel",
                         private = list(
                           .lm_model = NULL,
                           .xgb_model = NULL,
+                          .rf_model = NULL,
                           .preprocess_data = function(data, is_training = TRUE) {
                             columns_list <- c("Rok_produkcji", "Przebieg_km", "Pojemnosc_cm3", "Moc_km",
                                               "Paliwo", "Skrzynia", "Naped", "Nadwozie", "Pierwszy_wlasciciel",
@@ -34,7 +36,7 @@ CarModel <- R6::R6Class("CarModel",
                             if (method == "lm") {
                               train_data <- train_data %>% mutate(across(where(is.numeric), scale)) 
                               private$.lm_model <- lm(Cena ~ Rok_produkcji + Przebieg_km + Pojemnosc_cm3 + 
-                              Paliwo + Skrzynia + Naped + Nadwozie + Pierwszy_wlasciciel + ASO + Bezwypadkowy, data = train_data)
+                                                        Paliwo + Skrzynia + Naped + Nadwozie + Pierwszy_wlasciciel + ASO + Bezwypadkowy, data = train_data)
                             } else if (method == "xgb") {
                               train_data_processed <- private$.preprocess_data(train_data)
                               train_data_matrix <- xgb.DMatrix(data = as.matrix(train_data_processed), label = train_data$Cena)
@@ -54,26 +56,53 @@ CarModel <- R6::R6Class("CarModel",
                                 nrounds = 100,
                                 nthread = 2
                               )
+                            } else if (method == "rf") {
+                              private$.rf_model <- randomForest(Cena ~ Rok_produkcji + Przebieg_km + Pojemnosc_cm3 + 
+                                                                  Paliwo + Skrzynia + Naped + Nadwozie + Pierwszy_wlasciciel + ASO + Bezwypadkowy, 
+                                                                data = train_data,
+                                                                ntree = 100,
+                                                                mtry = 5,
+                                                                maxnodes = 10)
+                            } else {
+                              stop("Invalid training method specified. Only 'lm', 'xgb' and 'rf' are supported.")
                             }
                           },
                           predict = function(test_data, method = "lm") {
                             if (method == "lm") {
+                              if(is.null(private$.lm_model)) {
+                                stop("Linear model has not been trained yet.")
+                              }
+                              
                               # Create a separate scaled version of the test data
                               test_data_scaled <- test_data %>% mutate(across(where(is.numeric), scale))
-                              test_data_scaled <- test_data_scaled %>% select(-Cena)
                               
                               # Make predictions on the scaled test data
                               predictions_scaled <- predict(private$.lm_model, newdata = test_data_scaled)
                               
+                              # Unscale the final predictions
                               unscaled_predictions <- predictions_scaled * 24664.76 + 38225.88
                               
                               return(unscaled_predictions)
                             } else if (method == "xgb") {
+                              if(is.null(private$.xgb_model)) {
+                                stop("XGBoost model has not been trained yet.")
+                              }
+                              
                               test_data_processed <- private$.preprocess_data(test_data, is_training = FALSE)
                               test_data_matrix <- xgb.DMatrix(data = as.matrix(test_data_processed))
                               predictions <- predict(private$.xgb_model, newdata = test_data_matrix)
                               
                               return(predictions)
+                            } else if (method == "rf") {
+                              if(is.null(private$.rf_model)) {
+                                stop("Random Forest model has not been trained yet.")
+                              }
+                              
+                              predictions <- predict(private$.rf_model, newdata = test_data)
+                              
+                              return(predictions)
+                            } else {
+                              stop("Invalid prediction method specified. Only 'lm', 'xgb' and 'rf' are supported.")
                             }
                           },
                           evaluate = function(predictions, test_data) {
@@ -93,47 +122,64 @@ CarModel <- R6::R6Class("CarModel",
                           },
                           save_model = function(file, method = "lm") {
                             if (method == "lm") {
+                              if(is.null(private$.lm_model)) {
+                                stop("Linear model has not been trained yet.")
+                              }
+                              
                               saveRDS(private$.lm_model, paste0(file, ".rds"))
                             } else if (method == "xgb") {
+                              if(is.null(private$.xgb_model)) {
+                                stop("XGBoost model has not been trained yet.")
+                              }
+                              
                               saveRDS(private$.xgb_model, paste0(file, ".rds"))
+                            } else if (method == "rf") {
+                              if(is.null(private$.rf_model)) {
+                                stop("Random Forest model has not been trained yet.")
+                              }
+                              
+                              saveRDS(private$.rf_model, paste0(file, ".rds"))
+                            } else {
+                              stop("Invalid saving method specified. Only 'lm', 'xgb' and 'rf' are supported.")
                             }
                           }
                         )
 )
 
-# Instantiate the CarModel class
 carModel <- CarModel$new()
 
-# Preprocess data
 data <- carModel$preprocess('otomoto_data.csv')
 
 ######################################################
 
-# Train linear model
 carModel$train(data$train_data, method = "lm")
 
-# Make predictions
 lm_predictions <- carModel$predict(data$test_data, method = "lm")
 
-# Evaluate linear model
 lm_metrics <- carModel$evaluate(lm_predictions, data$test_data)
-lm_metrics
+lm_metrics 
 
-# Save linear model
 carModel$save_model("lm_model", method = "lm")
 
 ######################################################
 
-# Train xgboost model
 carModel$train(data$train_data, method = "xgb")
 
-# Make predictions
 xgb_predictions <- carModel$predict(data$test_data, method = "xgb")
 
-# Evaluate xgboost model
 xgb_metrics <- carModel$evaluate(xgb_predictions, data$test_data)
 xgb_metrics
 
-# Save xgboost model
 carModel$save_model("xgb_model", method = "xgb")
+
+######################################################
+
+carModel$train(data$train_data, method = "rf")
+
+rf_predictions <- carModel$predict(data$test_data, method = "rf")
+
+rf_metrics <- carModel$evaluate(rf_predictions, data$test_data)
+rf_metrics
+
+carModel$save_model("rf_model", method = "rf")
 

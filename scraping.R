@@ -1,35 +1,39 @@
 library(rvest)
+library(assertthat)
 
 # This function scrapes car data from the provided URL
 scrape_car_data <- function(url) {
+  # Check if URL is valid
+  assert_that(!is.null(url) && nzchar(url) && grepl("^http[s]?://", url),
+              msg = "Invalid URL provided.")
+  
   webpage <- read_html(url)
   
   # Extract all offer parameters items
   offer_params <- webpage %>%
     html_nodes(".offer-params__item")
   
-  # Define a list to store the attribute names and their corresponding values
+  # If offer_params is empty, throw an error
+  if(length(offer_params) == 0) {
+    stop("No offer parameters found in the provided URL.")
+  }
+  
   car_data <- list()
   
-  # Loop through each offer parameters item
   for(i in seq_along(offer_params)) {
-    # Extract the attribute name
     attr_name <- offer_params[[i]] %>%
       html_node(".offer-params__label") %>%
       html_text() %>%
       trimws()
     
-    # Extract the corresponding value
     attr_value <- offer_params[[i]] %>%
       html_node(".offer-params__value") %>%
       html_text() %>%
       trimws()
     
-    # Store the value in the car_data list, using the attribute name as the key
     car_data[[attr_name]] <- attr_value
   }
   
-  # Convert list to data frame
   car_data <- as.data.frame(t(unlist(car_data)))
   
   # Assign 'Nie' to the specified attributes if they are not present
@@ -57,7 +61,7 @@ scrape_car_data <- function(url) {
                     "Paliwo", "Skrzynia", "Naped", "Nadwozie", "Pierwszy_wlasciciel",
                     "ASO", "Bezwypadkowy", "Wystawca")
   
-    # Column names mapping
+  # Column names mapping
   col_mapping <- c("Rok produkcji" = "Rok_produkcji", 
                    "Przebieg" = "Przebieg_km", 
                    "Pojemność skokowa" = "Pojemnosc_cm3", 
@@ -76,7 +80,7 @@ scrape_car_data <- function(url) {
   # Rename the columns
   names(car_data) <- col_mapping[names(car_data)]
 
-    # Select only the specified columns
+  # Select only the specified columns
   car_data <- car_data[, columns_list, drop = FALSE]
   
   # Encode all character columns as factors
@@ -87,8 +91,13 @@ scrape_car_data <- function(url) {
   return(car_data)
 }
 
+
 # This function scrapes the car price from the provided URL
 scrape_car_price <- function(url) {
+  # Check if URL is valid
+  assert_that(!is.null(url) && nzchar(url) && grepl("^http[s]?://", url),
+              msg = "Invalid URL provided.")
+  
   webpage <- read_html(url)
   
   car_price <- webpage %>%
@@ -98,13 +107,22 @@ scrape_car_price <- function(url) {
     str_replace_all("PLN", "") %>%
     as.numeric()
   
+  # If car_price is NA or negative, throw an error
+  if(is.na(car_price) || car_price < 0) {
+    stop("Invalid car price found in the provided URL.")
+  }
+  
   return(car_price)
 }
 
-# This function uses the scraped data and the xgboost model to predict the car price
-predict_car_price <- function(scraped_data, car_data, xgb_model) {
+# This function uses the scraped data and the xgb and rf models to predict the car price
+predict_car_price <- function(scraped_data, car_data, model) {
+  # Check if scraped_data, car_data, and model are not null
+  assert_that(!is.null(scraped_data), msg = "Scraped data cannot be null.")
+  assert_that(!is.null(car_data), msg = "Car data cannot be null.")
+  assert_that(!is.null(model), msg = "Model cannot be null.")
+  
   # Prepare the data frame for prediction
-  # Note: You'll need to adjust this depending on the structure of your scraped data and your model.
   newdata <- data.frame(
     Rok_produkcji = scraped_data$Rok_produkcji,
     Przebieg_km = scraped_data$Przebieg_km,
@@ -120,8 +138,8 @@ predict_car_price <- function(scraped_data, car_data, xgb_model) {
     Wystawca = factor(scraped_data$Wystawca, levels = levels(car_data$Wystawca))
   )
   
-  # Make the prediction using the xgboost model
-  prediction <- carModel$predict(newdata, method = "xgb")
+  # Make the prediction using the specified model
+  prediction <- carModel$predict(newdata, method = model)
 
   return(prediction)
 }

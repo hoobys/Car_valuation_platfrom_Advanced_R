@@ -3,9 +3,6 @@ library(shinydashboard)
 library(caret)
 library(xgboost)
 
-# Load the xgboost model if it's saved
-xgb_model <- readRDS("xgb_model.rds")
-
 # UI
 ui <- dashboardPage(
   
@@ -28,6 +25,7 @@ ui <- dashboardPage(
       ),
       tabItem(tabName = "predictions",
               h2("Car Price Predictions"),
+              p("As the site is in Polish, you have to choose the according features using their respective polish names."),
               fluidRow(
                 column(width = 4, numericInput("Rok_produkcji", "Production Year", value = 2010, min = 1990, max = 2023)),
                 column(width = 4, numericInput("Przebieg_km", "Mileage (km)", value = 50000, min = 0, max = 500000)),
@@ -45,19 +43,27 @@ ui <- dashboardPage(
               br(),
               actionButton("predict", "Predict"),
               br(),
-              h3("Predicted Car Prices:"),
-              div(style = "text-align: center; font-size: 24px; color: green", textOutput("lower_price_output")),
-              div(style = "text-align: center; font-size: 36px;", textOutput("predicted_output")),
-              div(style = "text-align: center; font-size: 24px; color: red", textOutput("higher_price_output"))      
+              fluidRow(
+                column(width = 6,
+                       h3("XGBoost Predicted Price:"),
+                       div(style = "text-align: center; font-size: 24px; color: green", textOutput("xgb_lower_price_output")),
+                       div(style = "text-align: center; font-size: 36px;", textOutput("xgb_predicted_output")),
+                       div(style = "text-align: center; font-size: 24px; color: red", textOutput("xgb_higher_price_output"))),
+                column(width = 6,
+                       h3("Random Forest Predicted Price:"),
+                       div(style = "text-align: center; font-size: 24px; color: green", textOutput("rf_lower_price_output")),
+                       div(style = "text-align: center; font-size: 36px;", textOutput("rf_predicted_output")),
+                       div(style = "text-align: center; font-size: 24px; color: red", textOutput("rf_higher_price_output")))
+              ),
     ),
     tabItem(tabName = "scrape_predict",
-            h2("Scrape Car Data and Predict Price"),
-            textInput("url", "Enter the URL of the car listing"),
+            h2("Scrape OTOMOTO car data and compare prices"),
+            textInput("url", "Enter the URL of the OTOMOTO car listing"),
             actionButton("scrape_predict", "Scrape Data and Predict"),
             br(),
-            h3("Scraped Car Data:"),
+            h3("Scraped car data:"),
             verbatimTextOutput("scraped_data_output"),
-            h3("Predicted Car Price:"),
+            h3("Predicted car price:"),
             htmlOutput("scraped_price_output")
     ))
   )
@@ -83,42 +89,67 @@ server <- function(input, output) {
       Wystawca = factor(input$Wystawca, levels = levels(car_data$Wystawca))
     )
     
-    # Make the prediction using the xgboost model
-    prediction <- carModel$predict(newdata, method = "xgb")
+    # Make the prediction using the xgb and rf models
+    prediction_xgb <- carModel$predict(newdata, method='xgb')
+    prediction_rf <- carModel$predict(newdata, method='rf')
     
-    return(prediction)
+    return(list(
+      xgb = prediction_xgb,
+      rf = prediction_rf
+    ))
   })
   
+  #####################################################
   
-  output$predicted_output <- renderText({
-    predicted_price <- predicted_prices()
+  output$xgb_predicted_output <- renderText({
+    predicted_price <- predicted_prices()$xgb
     paste0("PLN ", round(predicted_price, 2))
   })
   
-  output$lower_price_output <- renderText({
-    predicted_price <- predicted_prices()
+  output$xgb_lower_price_output <- renderText({
+    predicted_price <- predicted_prices()$xgb
     lower_price <- predicted_price * 0.95
     paste0("Lower confidence bound: PLN ", round(lower_price, 2))
   })
   
-  output$higher_price_output <- renderText({
-    predicted_price <- predicted_prices()
+  output$xgb_higher_price_output <- renderText({
+    predicted_price <- predicted_prices()$xgb
+    higher_price <- predicted_price * 1.05
+    paste0("Higher confidence bound: PLN ", round(higher_price, 2))
+  })
+  
+  #####################################################
+  
+  output$rf_predicted_output <- renderText({
+    predicted_price <- predicted_prices()$rf
+    paste0("PLN ", round(predicted_price, 2))
+  })
+  
+  output$rf_lower_price_output <- renderText({
+    predicted_price <- predicted_prices()$rf
+    lower_price <- predicted_price * 0.95
+    paste0("Lower confidence bound: PLN ", round(lower_price, 2))
+  })
+  
+  output$rf_higher_price_output <- renderText({
+    predicted_price <- predicted_prices()$rf
     higher_price <- predicted_price * 1.05
     paste0("Higher confidence bound: PLN ", round(higher_price, 2))
   })
   
   # Reactive expression for scraping and prediction
   scraped_and_predicted <- eventReactive(input$scrape_predict, {
-    # Scrape data from the provided URL
     scraped_data <- scrape_car_data(input$url)
     
-    # Original, scraped price
     original_price <- scrape_car_price(input$url)
     
-    # Use the scraped data to predict the car price
-    prediction <- predict_car_price(scraped_data, car_data, xgb_model)
+    prediction_xgb <- predict_car_price(scraped_data, car_data, 'xgb')
+    prediction_rf <- predict_car_price(scraped_data, car_data, 'rf')
     
-    list(scraped_data = scraped_data, prediction = prediction, original_price = original_price)
+    list(scraped_data = scraped_data, 
+         prediction_xgb = prediction_xgb, 
+         prediction_rf = prediction_rf,
+         original_price = original_price)
   })
   
   output$scraped_data_output <- renderPrint({
@@ -127,22 +158,34 @@ server <- function(input, output) {
   
   output$scraped_price_output <- renderUI({
     scraped_price <- scraped_and_predicted()$original_price
-    predicted_price <- scraped_and_predicted()$prediction
-    price_diff <- predicted_price - scraped_price
-    percentage_diff <- (price_diff / scraped_price) * 100
+    predicted_xgb <- scraped_and_predicted()$prediction_xgb
+    predicted_rf <- scraped_and_predicted()$prediction_rf
     
-    color <- ifelse(price_diff > 0, "green", "red")
+    price_diff_xgb <- predicted_xgb - scraped_price
+    price_diff_rf <- predicted_rf - scraped_price
+    
+    percentage_diff_xgb <- (price_diff_xgb / scraped_price) * 100
+    percentage_diff_rf <- (price_diff_rf / scraped_price) * 100
+    
+    color_xgb <- ifelse(price_diff_xgb > 0, "green", "red")
+    color_rf <- ifelse(price_diff_rf > 0, "green", "red")
     
     HTML(
       paste0(
-        "<div style='text-align: center; font-size: 24px;'>",
-        "Listed Price: PLN ", round(scraped_price, 2),
+        "<div style='display: flex; flex-direction: row; justify-content: center;'>",
+        
+        "<div style='text-align: center; flex-basis: 50%;'>",
+        "<div style='font-size: 24px;'>Listed Price: PLN ", round(scraped_price, 2), "</div>",
+        "<div style='font-size: 36px;'>XGBoost Predicted Price: PLN ", round(predicted_xgb, 2), "</div>",
+        "<div style='font-size: 24px; color:", color_xgb, ";'>Difference (XGBoost): PLN ", round(price_diff_xgb, 2), " (", round(percentage_diff_xgb, 2), "%)</div>",
         "</div>",
-        "<div style='text-align: center; font-size: 36px;'>",
-        "Predicted Price: PLN ", round(predicted_price, 2),
+        
+        "<div style='text-align: center; flex-basis: 50%;'>",
+        "<div style='font-size: 24px;'>Listed Price: PLN ", round(scraped_price, 2), "</div>",
+        "<div style='font-size: 36px;'>Random Forest Predicted Price: PLN ", round(predicted_rf, 2), "</div>",
+        "<div style='font-size: 24px; color:", color_rf, ";'>Difference (Random Forest): PLN ", round(price_diff_rf, 2), " (", round(percentage_diff_rf, 2), "%)</div>",
         "</div>",
-        "<div style='text-align: center; font-size: 24px; color:", color, ";'>",
-        "Difference: PLN ", round(price_diff, 2), " (", round(percentage_diff, 2), "%)",
+        
         "</div>"
       )
     )
