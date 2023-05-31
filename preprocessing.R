@@ -3,66 +3,71 @@ require(caret)
 require(ggplot2)
 require(car)
 
-preprocess_car_data <- function(file_path) {
+preprocess_car_data <- function(otomoto_data.csv) {
   
-  # Read the car dataset into a data frame
-  car_data <- read.csv(file_path)
+    if (!file.exists(otomoto_data.csv)) {
+    stop("Input file does not exist.")
+  }
   
-  str(car_data)
+  if (!grepl("\\.csv$", otomoto_data.csv)) {
+    stop("Input file must be in CSV format.")
+  }
   
-  # Data Cleaning
-  # Remove duplicate records
+  car_data <- tryCatch(
+    {
+      read.csv(otomoto_data.csv)
+    },
+    error = function(e) {
+      stop("Error reading the car dataset:", conditionMessage(e))
+    },
+    warning = function(w) {
+      stop("Warning reading the car dataset:", conditionMessage(w))
+    }
+  )
+  
+  required_columns <- c("Cena", "Rok_produkcji", "Przebieg_km", "Moc_km", "Drzwi", "Miejsca", "Pojemnosc_cm3")
+  missing_columns <- setdiff(required_columns, colnames(car_data))
+  if (length(missing_columns) > 0) {
+    stop(paste("Missing columns:", paste(missing_columns, collapse = ", ")))
+  }
+  
   car_data <- distinct(car_data)
   
-  # Specify the columns where you want to drop rows with missing values
-  columns_to_drop_na <- c("Cena", 
-                          "Rok_produkcji", 
-                          "Przebieg_km", 
-                          "Moc_km", 
-                          "Drzwi",
-                          "Miejsca",
-                          "Pojemnosc_cm3")
-  
-  summary(car_data)
-  
-  # Drop variables with Cena > 100,000
- car_data <- car_data %>%
+  car_data <- car_data %>%
     filter(Cena <= 100000)
   
   car_data <- car_data %>%
     filter(Cena >= 10000)
   
-  # Drop variables with Rok produkcji < 1995
   car_data <- car_data %>%
     filter(Rok_produkcji >= 1995)
   
   car_data <- car_data %>%
     filter(Przebieg_km <= 200000)
   
-  car_data <- car_data %>% 
+  car_data <- car_data %>%
     filter(Pojemnosc_cm3 <= 3000)
   
-  car_data <- car_data %>% 
-    filter(Moc_km <= 300) 
-
-  # Drop rows with missing values in the specified columns
   car_data <- car_data %>%
-    drop_na(all_of(columns_to_drop_na))
+    filter(Moc_km <= 300)
   
-  # Print the updated dataset
-  print(car_data)
+  if (nrow(car_data) < 5000) {
+    warning("Small sample size for modeling.")
+  }
   
-  # Encode all character columns as factors
+  
+  car_data <- car_data %>%
+    drop_na(all_of(required_columns))
+  
   car_data <- car_data %>%
     mutate(across(where(is.character), as.factor))
   
-  
-  
-  # Print the updated dataset
   print(car_data)
   
   return(car_data)
 }
+
+
 
 create_box_plots <- function(data) {
   
@@ -81,7 +86,7 @@ create_box_plots <- function(data) {
     Wystawca = data$Wystawca
   )
   
-  # Create box plots using ggplot2
+
   create_box_plots.Rok_produkcji <- function(data) {
     ggplot(data, aes(x = "", y = Rok_produkcji)) +
       geom_boxplot(fill = "darkred", color = "black") +
@@ -110,12 +115,12 @@ create_box_plots <- function(data) {
       theme_minimal()
   }
   
-  # Call the respective box plot methods
+
   print(create_box_plots.Rok_produkcji(boxplot_data))
   print(create_box_plots.Przebieg_km(boxplot_data))
   print(create_box_plots.Pojemnosc_cm3(boxplot_data))
   print(create_box_plots.Moc_km(boxplot_data))
-
+  
 }
 
 car_data <- preprocess_car_data('otomoto_data.csv')
